@@ -99,7 +99,7 @@ class EscalationModel:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, path: Path | str) -> "EscalationModel":
+    def load(cls, path: Path | str) -> EscalationModel:
         import pickle
         with open(path, "rb") as f:
             return pickle.load(f)

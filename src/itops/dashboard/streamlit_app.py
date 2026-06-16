@@ -69,7 +69,10 @@ def view_operaciones(df: pd.DataFrame) -> None:
     st.dataframe(top10, use_container_width=True)
 
     st.subheader("Narrativa LLM — Explicación por ticket")
-    st.caption("Requiere que la API esté corriendo. Selecciona un ticket de alto riesgo y genera la explicación en lenguaje natural.")
+    st.caption(
+        "Requiere que la API esté corriendo. "
+        "Selecciona un ticket de alto riesgo y genera la explicación en lenguaje natural."
+    )
 
     api_url = st.text_input("URL de la API", value="http://localhost:8000", key="api_url")
     top_ids = df.nlargest(20, "risk_score")["ticket_id"].tolist()

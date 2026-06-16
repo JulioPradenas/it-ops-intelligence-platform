@@ -86,9 +86,9 @@ def client():
         patch("itops.api.main.AutoencoderDetector.load", return_value=MockAEDetector()),
         patch("itops.api.main.ShapExplainer", return_value=MockShapExplainer()),
         patch("itops.api.main.NarrativeGenerator", return_value=MockNarrativeGenerator()),
+        TestClient(app) as c,
     ):
-        with TestClient(app) as c:
-            yield c
+        yield c
 
 
 def test_health_ok(client):

@@ -54,7 +54,7 @@ class IsolationForestDetector(AnomalyDetector):
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, path: Path | str) -> "IsolationForestDetector":
+    def load(cls, path: Path | str) -> IsolationForestDetector:
         import pickle
         with open(path, "rb") as f:
             return pickle.load(f)
@@ -136,16 +136,18 @@ class AutoencoderDetector(AnomalyDetector):
 
     def save(self, path: Path | str, weights_path: Path | str) -> None:
         import pickle
-        import torch
+
+        import torch  # noqa: PLC0415
         torch.save(self._model.state_dict(), str(weights_path))
         state = {k: v for k, v in self.__dict__.items() if k != "_model"}
         with open(path, "wb") as f:
             pickle.dump(state, f)
 
     @classmethod
-    def load(cls, path: Path | str, weights_path: Path | str) -> "AutoencoderDetector":
+    def load(cls, path: Path | str, weights_path: Path | str) -> AutoencoderDetector:
         import pickle
-        import torch
+
+        import torch  # noqa: PLC0415
         with open(path, "rb") as f:
             state = pickle.load(f)
         obj = cls.__new__(cls)
