@@ -138,6 +138,8 @@ class AutoencoderDetector(AnomalyDetector):
         import pickle
 
         import torch  # noqa: PLC0415
+        if self._model is None:
+            raise RuntimeError("Call fit() before save()")
         torch.save(self._model.state_dict(), str(weights_path))
         state = {k: v for k, v in self.__dict__.items() if k != "_model"}
         with open(path, "wb") as f:
