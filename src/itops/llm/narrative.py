@@ -138,7 +138,7 @@ class NarrativeGenerator:
         """Genera o recupera del caché una narrativa para el ticket dado."""
         key = self._cache_key(ticket_context, top_features)
         cached = self._cache_get(key)
-        if cached:
+        if cached and cached.confidence > 0.0:
             return cached
 
         prompt = build_escalation_prompt(ticket_context, top_features)
@@ -147,5 +147,6 @@ class NarrativeGenerator:
         except Exception:
             narrative = self._call_hf(prompt, ticket_context=ticket_context)
 
-        self._cache_set(key, narrative)
+        if narrative.confidence > 0.0:
+            self._cache_set(key, narrative)
         return narrative
