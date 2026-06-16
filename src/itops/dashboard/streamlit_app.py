@@ -9,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 
-from itops.config import PROCESSED_DIR
+from itops.config import PROCESSED_DIR, RAW_TICKETS_CSV
 
 PARQUET_PATH = PROCESSED_DIR / "dashboard_data.parquet"
 METRICS_PATH = PROCESSED_DIR / "model_metrics.json"
@@ -25,6 +25,11 @@ def load_metrics() -> dict:
     if METRICS_PATH.exists():
         return json.loads(METRICS_PATH.read_text())
     return {}
+
+
+@st.cache_data
+def load_raw_tickets() -> pd.DataFrame:
+    return pd.read_csv(RAW_TICKETS_CSV, parse_dates=["created_at"])
 
 
 def view_operaciones(df: pd.DataFrame) -> None:
@@ -62,6 +67,60 @@ def view_operaciones(df: pd.DataFrame) -> None:
         })
     )
     st.dataframe(top10, use_container_width=True)
+
+    st.subheader("Narrativa LLM — Explicación por ticket")
+    st.caption("Requiere que la API esté corriendo. Selecciona un ticket de alto riesgo y genera la explicación en lenguaje natural.")
+
+    api_url = st.text_input("URL de la API", value="http://localhost:8000", key="api_url")
+    top_ids = df.nlargest(20, "risk_score")["ticket_id"].tolist()
+    selected_id = st.selectbox("Ticket (top 20 por riesgo)", top_ids)
+
+    if st.button("Generar narrativa con Claude"):
+        raw = load_raw_tickets()
+        matches = raw[raw["ticket_id"] == selected_id]
+        if matches.empty:
+            st.error(f"Ticket {selected_id} no encontrado en el dataset raw.")
+        else:
+            row = matches.iloc[0]
+            payload = {
+                "ticket": {
+                    "ticket_id": str(row["ticket_id"]),
+                    "created_at": row["created_at"].isoformat(),
+                    "category": str(row["category"]),
+                    "subcategory": str(row.get("subcategory", "unknown")),
+                    "priority_initial": str(row["priority_initial"]),
+                    "customer_tier": str(row["customer_tier"]),
+                    "description": str(row["description"]),
+                    "response_time_minutes": int(row["response_time_minutes"]),
+                    "num_comments": int(row["num_comments"]),
+                    "num_reassignments": int(row["num_reassignments"]),
+                    "business_hours": bool(row["business_hours"]),
+                    "assigned_team": str(row["assigned_team"]),
+                }
+            }
+            with st.spinner("Llamando a la API..."):
+                try:
+                    import httpx
+                    resp = httpx.post(f"{api_url}/explain", json=payload, timeout=30)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        narrative = data["narrative"]
+                        st.markdown(f"**Resumen:** {narrative['summary']}")
+                        st.markdown(f"**Recomendación:** {narrative['recommendation']}")
+                        c1, c2 = st.columns(2)
+                        c1.metric("Confianza", f"{narrative['confidence']:.0%}")
+                        c2.metric("Proveedor LLM", narrative["provider"])
+                        features_str = " · ".join(f["feature"] for f in data["top_features"])
+                        st.caption(f"Top SHAP features: {features_str}")
+                    else:
+                        st.error(f"API respondió {resp.status_code}: {resp.text[:200]}")
+                except Exception as exc:
+                    st.warning(
+                        f"No se pudo conectar a la API en `{api_url}`.\n\n"
+                        f"Inicia el servidor con:\n```\n"
+                        f"KMP_DUPLICATE_LIB_OK=TRUE OMP_NUM_THREADS=1 "
+                        f"uv run uvicorn itops.api.main:app\n```\n\nError: {exc}"
+                    )
 
 
 def view_compliance(df: pd.DataFrame) -> None:
