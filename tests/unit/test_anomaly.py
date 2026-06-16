@@ -102,6 +102,10 @@ def test_ae_scores_reproducible(X_small):
     np.testing.assert_array_almost_equal(c.score(X_small), d.score(X_small))
 
 
+@pytest.mark.skipif(
+    not RAW_TICKETS_CSV.exists() or not SEEDED_ANOMALIES_JSON.exists(),
+    reason="requires generated data (run scripts/generate_data.py first)",
+)
 def test_seeded_anomalies_detected_by_if():
     """Las 6 anomalías sembradas deben estar en el top 3% de scores (IsolationForest)."""
     df = load_tickets(RAW_TICKETS_CSV)
