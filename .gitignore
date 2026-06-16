@@ -18,7 +18,8 @@ htmlcov/
 # Datos generados (reproducibles con scripts/generate_data.py)
 data/raw/*.csv
 data/raw/*.json
-data/processed/*
+data/processed/models/
+data/processed/narrative_cache.db
 
 # MLflow / modelos (fases posteriores)
 mlruns/
