@@ -134,6 +134,43 @@ class NarrativeGenerator:
             )
         return parsed
 
+    def _build_template_narrative(
+        self, ticket_context: dict, top_features: list[dict]
+    ) -> Narrative:
+        """Narrativa determinista desde el contexto — sin llamada a LLM."""
+        risk = float(ticket_context.get("risk_score", 0.0))
+        category = ticket_context.get("category", "desconocida")
+        tier = ticket_context.get("customer_tier", "")
+        priority = ticket_context.get("priority", "")
+        feat_names = [f["feature"] for f in top_features[:2]] if top_features else []
+        feat_str = " y ".join(feat_names) if feat_names else "múltiples indicadores"
+
+        summary = (
+            f"Ticket de categoría '{category}' (cliente {tier}, prioridad {priority}) "
+            f"con {risk:.0%} de probabilidad de escalación. "
+            f"Factores determinantes: {feat_str}."
+        )
+        if risk >= 0.8:
+            recommendation = (
+                f"Escalación inmediata. Asignar técnico senior de '{category}' "
+                f"y contactar al cliente {tier} en menos de 30 minutos."
+            )
+        elif risk >= 0.5:
+            recommendation = (
+                f"Revisión prioritaria en la próxima hora. Verificar SLA del cliente {tier} "
+                f"y considerar reasignación si no hay progreso."
+            )
+        else:
+            recommendation = (
+                f"Monitorear evolución. Actualizar al cliente {tier} con el estado actual."
+            )
+        return Narrative(
+            summary=summary,
+            recommendation=recommendation,
+            confidence=round(risk, 2),
+            provider="template",
+        )
+
     def generate(self, ticket_context: dict, top_features: list[dict]) -> Narrative:
         """Genera o recupera del caché una narrativa para el ticket dado."""
         key = self._cache_key(ticket_context, top_features)
@@ -145,7 +182,10 @@ class NarrativeGenerator:
         try:
             narrative = self._call_claude(prompt)
         except Exception:
-            narrative = self._call_hf(prompt, ticket_context=ticket_context)
+            try:
+                narrative = self._call_hf(prompt, ticket_context=ticket_context)
+            except Exception:
+                narrative = self._build_template_narrative(ticket_context, top_features)
 
         if narrative.confidence > 0.0:
             self._cache_set(key, narrative)
