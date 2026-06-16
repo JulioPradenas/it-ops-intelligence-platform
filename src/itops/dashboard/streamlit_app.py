@@ -89,7 +89,7 @@ def view_compliance(df: pd.DataFrame) -> None:
     priorities = sorted(df["priority_initial"].dropna().unique())
     ax.boxplot(
         [df[df["priority_initial"] == p]["response_time_minutes"].dropna() for p in priorities],
-        labels=priorities,
+        tick_labels=priorities,
     )
     ax.set_xlabel("Prioridad")
     ax.set_ylabel("Tiempo de respuesta (min)")
