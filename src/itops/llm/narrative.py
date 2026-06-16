@@ -1,18 +1,18 @@
-"""Generación de narrativas en lenguaje natural con Claude + fallback HF.
+"""Generación de narrativas en lenguaje natural.
 
-NarrativeGenerator intenta Claude primero, cae al pipeline HF si falla,
-y cachea resultados en SQLite para evitar llamadas redundantes.
+Cadena de proveedores: Claude → Groq (llama-3.1-8b-instant) → Template.
+Cachea en SQLite para evitar llamadas redundantes.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import anthropic
 from pydantic import BaseModel, field_validator
@@ -22,7 +22,7 @@ from itops.llm.prompts import build_escalation_prompt
 
 
 class Narrative(BaseModel):
-    """Narrativa de riesgo generada por LLM para un ticket de escalación."""
+    """Narrativa de riesgo generada para un ticket de escalación."""
 
     summary: str
     recommendation: str
@@ -36,18 +36,17 @@ class Narrative(BaseModel):
 
 
 class NarrativeGenerator:
-    """Genera narrativas en español usando Claude con fallback a flan-t5-small."""
+    """Genera narrativas en español. Cadena: Claude → Groq → Template."""
 
     def __init__(
         self,
-        api_key: str | None = None,
+        anthropic_api_key: str | None = None,
+        groq_api_key: str | None = None,
         cache_path: Path | str = PROCESSED_DIR / "narrative_cache.db",
-        hf_model: str = "google/flan-t5-small",
     ) -> None:
-        self._api_key = api_key
+        self._anthropic_key = anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self._groq_key = groq_api_key or os.environ.get("GROQ_API_KEY")
         self._cache_path = Path(cache_path)
-        self._hf_model = hf_model
-        self._hf_pipeline: Any = None
         self._init_cache()
 
     def _init_cache(self) -> None:
@@ -80,6 +79,11 @@ class NarrativeGenerator:
     def _parse_llm_response(self, text: str, provider: str) -> Narrative:
         match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
         clean = match.group(1).strip() if match else text.strip()
+        # Some models wrap JSON in { } without code fences — try to find it
+        if not clean.startswith("{"):
+            brace = clean.find("{")
+            if brace != -1:
+                clean = clean[brace:]
         try:
             data = json.loads(clean)
             return Narrative(
@@ -90,14 +94,16 @@ class NarrativeGenerator:
             )
         except (json.JSONDecodeError, KeyError, ValueError):
             return Narrative(
-                summary="No se pudo generar un resumen automático.",
-                recommendation="Revisar el ticket manualmente con el equipo de soporte.",
+                summary="",
+                recommendation="",
                 confidence=0.0,
                 provider=provider,
             )
 
     def _call_claude(self, prompt: str) -> Narrative:
-        client = anthropic.Anthropic(api_key=self._api_key)
+        if not self._anthropic_key:
+            raise ValueError("ANTHROPIC_API_KEY not set")
+        client = anthropic.Anthropic(api_key=self._anthropic_key)
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=300,
@@ -107,32 +113,18 @@ class NarrativeGenerator:
         text = getattr(block, "text", "")
         return self._parse_llm_response(str(text), provider="claude")
 
-    def _call_hf(self, prompt: str, ticket_context: dict | None = None) -> Narrative:
-        if self._hf_pipeline is None:
-            from transformers import pipeline  # noqa: PLC0415
-
-            self._hf_pipeline = pipeline("text-generation", model=self._hf_model)  # type: ignore[call-overload]
-        result = self._hf_pipeline(prompt, max_new_tokens=200)
-        text = result[0]["generated_text"]
-        parsed = self._parse_llm_response(text, provider="hf")
-        # flan-t5-small rarely generates valid JSON; build a minimal narrative from context.
-        if parsed.confidence == 0.0 and ticket_context:
-            risk = ticket_context.get("risk_score", 0.0)
-            category = ticket_context.get("category", "desconocida")
-            tier = ticket_context.get("customer_tier", "")
-            return Narrative(
-                summary=(
-                    f"Ticket de categoría '{category}' con riesgo de escalación "
-                    f"{risk:.0%} (cliente {tier}). Requiere atención prioritaria."
-                ),
-                recommendation=(
-                    "Verificar SLA del cliente, reasignar a técnico senior "
-                    "y notificar al responsable del área."
-                ),
-                confidence=round(float(risk), 2),
-                provider="hf",
-            )
-        return parsed
+    def _call_groq(self, prompt: str) -> Narrative:
+        if not self._groq_key:
+            raise ValueError("GROQ_API_KEY not set")
+        from groq import Groq  # noqa: PLC0415
+        client = Groq(api_key=self._groq_key)
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+        )
+        text = response.choices[0].message.content or ""
+        return self._parse_llm_response(text, provider="groq")
 
     def _build_template_narrative(
         self, ticket_context: dict, top_features: list[dict]
@@ -179,13 +171,19 @@ class NarrativeGenerator:
             return cached
 
         prompt = build_escalation_prompt(ticket_context, top_features)
-        try:
-            narrative = self._call_claude(prompt)
-        except Exception:
+        narrative: Narrative | None = None
+
+        for caller in (self._call_claude, self._call_groq):
             try:
-                narrative = self._call_hf(prompt, ticket_context=ticket_context)
+                result = caller(prompt)
+                if result.confidence > 0.0:
+                    narrative = result
+                    break
             except Exception:
-                narrative = self._build_template_narrative(ticket_context, top_features)
+                continue
+
+        if narrative is None:
+            narrative = self._build_template_narrative(ticket_context, top_features)
 
         if narrative.confidence > 0.0:
             self._cache_set(key, narrative)

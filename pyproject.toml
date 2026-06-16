@@ -15,7 +15,6 @@ dependencies = [
     "lightgbm>=4.3",
     "shap>=0.45",
     "anthropic>=0.30",
-    "transformers>=4.40",
     "pydantic>=2.5",
     "fastapi>=0.111",
     "uvicorn>=0.30",
@@ -23,6 +22,8 @@ dependencies = [
     "streamlit>=1.35",
     "matplotlib>=3.8",
     "seaborn>=0.13",
+    "groq>=0.9",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

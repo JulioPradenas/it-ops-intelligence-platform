@@ -110,7 +110,7 @@ def view_operaciones(df: pd.DataFrame) -> None:
 
                         provider_labels = {
                             "claude": "Claude Haiku (Anthropic)",
-                            "hf": "flan-t5-small (HF fallback)",
+                            "groq": "Groq · llama-3.1-8b-instant",
                             "template": "Template (sin API key)",
                         }
                         provider_label = provider_labels.get(provider, provider)
@@ -211,7 +211,7 @@ def view_como_lo_hice() -> None:
             "**Fase 3 — Predicción de escalación:** LightGBM con split temporal 80/20 y threshold "
             "optimizado por costo asimétrico (FN:FP = 5:1). SHAP TreeExplainer por ticket.\n\n"
             "**Fase 4 — Narrativas LLM:** Claude Haiku genera resúmenes en español con fallback a "
-            "flan-t5-small para entornos offline. SQLite para caché de deduplicación.\n\n"
+            "Groq (llama-3.1-8b-instant) y template determinista. SQLite para caché de deduplicación.\n\n"
             "**Fase 5 — API y Dashboard:** FastAPI expone los modelos. Streamlit consume parquet "
             "pre-computado — sin dependencia de la API para demos."
         )
@@ -227,7 +227,7 @@ def view_como_lo_hice() -> None:
                 "scikit-learn (Isolation Forest), PyTorch (Autoencoder MLP)",
                 "LightGBM",
                 "SHAP TreeExplainer",
-                "Claude Haiku (primario), flan-t5-small (fallback offline)",
+                "Claude Haiku (primario), Groq llama-3.1-8b-instant (fallback), Template (offline)",
                 "FastAPI, uvicorn, Pydantic v2",
                 "Streamlit, seaborn, matplotlib",
             ],
@@ -239,8 +239,8 @@ def view_como_lo_hice() -> None:
             "el conflicto OpenMP con PyTorch en macOS.\n"
             "- **Threshold por costo asimétrico** — FN:FP = 5:1. Un ticket que escala sin "
             "detectarse cuesta 5× más que una falsa alarma.\n"
-            "- **Claude + fallback HF** — calidad de narrativas con Haiku; flan-t5-small "
-            "permite ejecutar en CI/offline sin API key.\n"
+            "- **Claude + Groq + Template** — calidad con Haiku; Groq (llama-3.1-8b-instant) "
+            "como fallback rápido; template determinista para CI/offline sin API key.\n"
             "- **Dashboard independiente de la API** — el parquet pre-computado permite demos "
             "sin levantar el servidor; más robusto para presentaciones."
         )
