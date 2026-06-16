@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Datos generados (reproducibles con scripts/generate_data.py)
+data/raw/*.csv
+data/raw/*.json
+data/processed/*
+
+# MLflow / modelos (fases posteriores)
+mlruns/
+*.pkl
+*.pt
