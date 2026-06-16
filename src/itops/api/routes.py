@@ -50,21 +50,7 @@ async def health(request: Request) -> HealthResponse:
 
 @router.post("/anomaly", response_model=AnomalyResponse)
 async def anomaly(body: AnomalyRequest, request: Request) -> AnomalyResponse:
-    df = pd.DataFrame([{
-        "ticket_id": t.ticket_id,
-        "created_at": pd.Timestamp(t.created_at),
-        "category": t.category,
-        "subcategory": t.subcategory,
-        "priority_initial": t.priority_initial,
-        "customer_tier": t.customer_tier,
-        "description": t.description,
-        "response_time_minutes": t.response_time_minutes,
-        "num_comments": t.num_comments,
-        "num_reassignments": t.num_reassignments,
-        "business_hours": t.business_hours,
-        "assigned_team": t.assigned_team,
-        "escalated": False,
-    } for t in body.tickets])
+    df = pd.concat([_ticket_to_df(t) for t in body.tickets]).reset_index(drop=True)
 
     hourly_feat = build_hourly_features(df)
     X = hourly_feat[FEATURE_COLS].values
