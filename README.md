@@ -2,8 +2,11 @@
 
 [![CI](https://github.com/JulioPradenas/it-ops-intelligence-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/JulioPradenas/it-ops-intelligence-platform/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/JulioPradenas/it-ops-intelligence-platform/branch/main/graph/badge.svg)](https://codecov.io/gh/JulioPradenas/it-ops-intelligence-platform)
+[![Dashboard](https://img.shields.io/badge/dashboard-live-brightgreen)](https://it-operations-intelligence-platform.streamlit.app/)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/package%20manager-uv-blueviolet)](https://github.com/astral-sh/uv)
+
+**[Live demo →](https://it-operations-intelligence-platform.streamlit.app/)**
 
 Plataforma end-to-end de inteligencia operacional para datos ITSM. Combina detección de anomalías, scoring de riesgo de escalación y narrativas generadas con LLM — expuesto via FastAPI y visualizado en un dashboard Streamlit por audiencia.
 
