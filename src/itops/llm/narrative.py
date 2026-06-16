@@ -107,14 +107,32 @@ class NarrativeGenerator:
         text = getattr(block, "text", "")
         return self._parse_llm_response(str(text), provider="claude")
 
-    def _call_hf(self, prompt: str) -> Narrative:
+    def _call_hf(self, prompt: str, ticket_context: dict | None = None) -> Narrative:
         if self._hf_pipeline is None:
             from transformers import pipeline  # noqa: PLC0415
 
             self._hf_pipeline = pipeline("text-generation", model=self._hf_model)  # type: ignore[call-overload]
         result = self._hf_pipeline(prompt, max_new_tokens=200)
         text = result[0]["generated_text"]
-        return self._parse_llm_response(text, provider="hf")
+        parsed = self._parse_llm_response(text, provider="hf")
+        # flan-t5-small rarely generates valid JSON; build a minimal narrative from context.
+        if parsed.confidence == 0.0 and ticket_context:
+            risk = ticket_context.get("risk_score", 0.0)
+            category = ticket_context.get("category", "desconocida")
+            tier = ticket_context.get("customer_tier", "")
+            return Narrative(
+                summary=(
+                    f"Ticket de categoría '{category}' con riesgo de escalación "
+                    f"{risk:.0%} (cliente {tier}). Requiere atención prioritaria."
+                ),
+                recommendation=(
+                    "Verificar SLA del cliente, reasignar a técnico senior "
+                    "y notificar al responsable del área."
+                ),
+                confidence=round(float(risk), 2),
+                provider="hf",
+            )
+        return parsed
 
     def generate(self, ticket_context: dict, top_features: list[dict]) -> Narrative:
         """Genera o recupera del caché una narrativa para el ticket dado."""
@@ -127,7 +145,7 @@ class NarrativeGenerator:
         try:
             narrative = self._call_claude(prompt)
         except Exception:
-            narrative = self._call_hf(prompt)
+            narrative = self._call_hf(prompt, ticket_context=ticket_context)
 
         self._cache_set(key, narrative)
         return narrative

@@ -105,13 +105,30 @@ def view_operaciones(df: pd.DataFrame) -> None:
                     if resp.status_code == 200:
                         data = resp.json()
                         narrative = data["narrative"]
-                        st.markdown(f"**Resumen:** {narrative['summary']}")
-                        st.markdown(f"**Recomendación:** {narrative['recommendation']}")
-                        c1, c2 = st.columns(2)
-                        c1.metric("Confianza", f"{narrative['confidence']:.0%}")
-                        c2.metric("Proveedor LLM", narrative["provider"])
-                        features_str = " · ".join(f["feature"] for f in data["top_features"])
-                        st.caption(f"Top SHAP features: {features_str}")
+                        provider = narrative["provider"]
+                        confidence = narrative["confidence"]
+
+                        if confidence == 0.0:
+                            st.error(
+                                "La narrativa no pudo generarse correctamente. "
+                                "Probablemente falta `ANTHROPIC_API_KEY` en el entorno de la API.\n\n"
+                                "Reinicia el servidor con:\n"
+                                "```\n"
+                                "ANTHROPIC_API_KEY=sk-ant-... "
+                                "KMP_DUPLICATE_LIB_OK=TRUE OMP_NUM_THREADS=1 "
+                                "uv run uvicorn itops.api.main:app\n"
+                                "```"
+                            )
+                        else:
+                            provider_label = "Claude (Anthropic)" if provider == "claude" else "flan-t5-small (HF fallback)"
+                            st.success(f"Narrativa generada via **{provider_label}**")
+                            st.markdown(f"**Resumen:** {narrative['summary']}")
+                            st.markdown(f"**Recomendación:** {narrative['recommendation']}")
+                            c1, c2 = st.columns(2)
+                            c1.metric("Confianza", f"{confidence:.0%}")
+                            c2.metric("Proveedor LLM", provider)
+                            features_str = " · ".join(f["feature"] for f in data["top_features"])
+                            st.caption(f"Top SHAP features: {features_str}")
                     else:
                         st.error(f"API respondió {resp.status_code}: {resp.text[:200]}")
                 except Exception as exc:
