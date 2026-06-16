@@ -7,6 +7,8 @@ entrenamiento LightGBM y optimización del threshold por costo asimétrico
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
@@ -90,3 +92,14 @@ class EscalationModel:
 
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         return (self.predict_proba(df) >= self.threshold_).astype(bool)
+
+    def save(self, path: Path | str) -> None:
+        import pickle
+        with open(path, "wb") as f:
+            pickle.dump(self, f)
+
+    @classmethod
+    def load(cls, path: Path | str) -> "EscalationModel":
+        import pickle
+        with open(path, "rb") as f:
+            return pickle.load(f)

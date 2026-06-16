@@ -10,6 +10,7 @@ La columna 0 de X debe ser ticket_count (ver FEATURE_COLS en features.py).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -46,6 +47,17 @@ class IsolationForestDetector(AnomalyDetector):
     def score(self, X: np.ndarray) -> np.ndarray:
         # decision_function: más negativo = más anómalo; invertimos para consistencia.
         return -self._model.decision_function(self._scaler.transform(X))
+
+    def save(self, path: Path | str) -> None:
+        import pickle
+        with open(path, "wb") as f:
+            pickle.dump(self, f)
+
+    @classmethod
+    def load(cls, path: Path | str) -> "IsolationForestDetector":
+        import pickle
+        with open(path, "rb") as f:
+            return pickle.load(f)
 
 
 class _MLP(nn.Module):
@@ -91,6 +103,7 @@ class AutoencoderDetector(AnomalyDetector):
         self._model: _MLP | None = None
 
     def fit(self, X: np.ndarray) -> None:
+        self._input_dim = X.shape[1]
         torch.manual_seed(self._seed)
         normal_mask = X[:, 0] < np.percentile(X[:, 0], 95)
         Xs = self._scaler.fit_transform(X[normal_mask])
@@ -120,3 +133,26 @@ class AutoencoderDetector(AnomalyDetector):
         with torch.no_grad():
             recon = self._model(tensor)
         return ((tensor - recon) ** 2).mean(dim=1).numpy()
+
+    def save(self, path: Path | str, weights_path: Path | str) -> None:
+        import pickle
+        import torch
+        torch.save(self._model.state_dict(), str(weights_path))
+        state = {k: v for k, v in self.__dict__.items() if k != "_model"}
+        with open(path, "wb") as f:
+            pickle.dump(state, f)
+
+    @classmethod
+    def load(cls, path: Path | str, weights_path: Path | str) -> "AutoencoderDetector":
+        import pickle
+        import torch
+        with open(path, "rb") as f:
+            state = pickle.load(f)
+        obj = cls.__new__(cls)
+        obj.__dict__.update(state)
+        obj._model = _MLP(state["_input_dim"])
+        obj._model.load_state_dict(
+            torch.load(str(weights_path), map_location="cpu", weights_only=True)
+        )
+        obj._model.eval()
+        return obj
