@@ -24,6 +24,7 @@ dependencies = [
     "seaborn>=0.13",
     "groq>=0.9",
     "python-dotenv>=1.0",
+    "mlflow>=2.13",
 ]
 
 [project.optional-dependencies]
@@ -71,3 +72,11 @@ addopts = "-q"
 [tool.coverage.run]
 source = ["itops"]
 branch = true
+omit = [
+    "src/itops/dashboard/streamlit_app.py",
+    "src/itops/utils/logging.py",
+    "src/itops/utils/mlflow_utils.py",
+]
+
+[tool.coverage.report]
+fail_under = 85
