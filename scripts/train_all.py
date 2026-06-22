@@ -89,8 +89,9 @@ def main() -> None:
         hourly_all["is_anomaly"] = is_anomaly
 
         dashboard_df = df_sorted[
-            ["ticket_id", "created_at", "category", "customer_tier", "escalated",
-             "response_time_minutes", "priority_initial", "assigned_team"]
+            ["ticket_id", "created_at", "category", "subcategory", "customer_tier",
+             "escalated", "response_time_minutes", "priority_initial", "assigned_team",
+             "description", "num_comments", "num_reassignments", "business_hours"]
         ].copy()
         dashboard_df["risk_score"] = risk_scores
         dashboard_df["predicted_escalation"] = predicted_escalation.astype(bool)

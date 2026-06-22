@@ -9,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 
-from itops.config import PROCESSED_DIR, RAW_TICKETS_CSV
+from itops.config import PROCESSED_DIR
 
 PARQUET_PATH = PROCESSED_DIR / "dashboard_data.parquet"
 METRICS_PATH = PROCESSED_DIR / "model_metrics.json"
@@ -25,11 +25,6 @@ def load_metrics() -> dict:
     if METRICS_PATH.exists():
         return json.loads(METRICS_PATH.read_text())
     return {}
-
-
-@st.cache_data
-def load_raw_tickets() -> pd.DataFrame:
-    return pd.read_csv(RAW_TICKETS_CSV, parse_dates=["created_at"])
 
 
 def view_operaciones(df: pd.DataFrame) -> None:
@@ -79,10 +74,9 @@ def view_operaciones(df: pd.DataFrame) -> None:
     selected_id = st.selectbox("Ticket (top 20 por riesgo)", top_ids)
 
     if st.button("Generar narrativa con Claude"):
-        raw = load_raw_tickets()
-        matches = raw[raw["ticket_id"] == selected_id]
+        matches = df[df["ticket_id"] == selected_id]
         if matches.empty:
-            st.error(f"Ticket {selected_id} no encontrado en el dataset raw.")
+            st.error(f"Ticket {selected_id} no encontrado en el dataset.")
         else:
             row = matches.iloc[0]
             payload = {
