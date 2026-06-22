@@ -87,11 +87,11 @@ def view_operaciones(df: pd.DataFrame) -> None:
                     "subcategory": str(row.get("subcategory", "unknown")),
                     "priority_initial": str(row["priority_initial"]),
                     "customer_tier": str(row["customer_tier"]),
-                    "description": str(row["description"]),
+                    "description": str(row.get("description", "")),
                     "response_time_minutes": int(row["response_time_minutes"]),
-                    "num_comments": int(row["num_comments"]),
-                    "num_reassignments": int(row["num_reassignments"]),
-                    "business_hours": bool(row["business_hours"]),
+                    "num_comments": int(row.get("num_comments", 0)),
+                    "num_reassignments": int(row.get("num_reassignments", 0)),
+                    "business_hours": bool(row.get("business_hours", True)),
                     "assigned_team": str(row["assigned_team"]),
                 }
             }
