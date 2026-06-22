@@ -52,7 +52,9 @@ class NarrativeGenerator:
     def _init_cache(self) -> None:
         if str(self._cache_path) != ":memory:":
             self._cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._cache_path))
+        # check_same_thread=False: la conexión se reusa entre reruns/threads
+        # de Streamlit y el threadpool de FastAPI.
+        self._conn = sqlite3.connect(str(self._cache_path), check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS narrative_cache "
             "(key TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL)"
