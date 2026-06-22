@@ -118,8 +118,9 @@ def view_operaciones(df: pd.DataFrame) -> None:
                 "risk_score": float(row["risk_score"]),
                 "description_snippet": str(row.get("description", ""))[:200],
             }
+            generator = get_narrative_generator()
             with st.spinner("Generando narrativa..."):
-                narrative = get_narrative_generator().generate(ticket_context, top_features)
+                narrative = generator.generate(ticket_context, top_features)
 
             provider_label = PROVIDER_LABELS.get(narrative.provider, narrative.provider)
             st.success(f"Narrativa generada · **{provider_label}**")
@@ -131,6 +132,22 @@ def view_operaciones(df: pd.DataFrame) -> None:
             if top_features:
                 features_str = " · ".join(f["feature"] for f in top_features)
                 st.caption(f"Top SHAP features: {features_str}")
+
+            if narrative.provider == "template":
+                with st.expander("Diagnóstico (por qué no se usó un LLM)"):
+                    st.write(
+                        f"- `GROQ_API_KEY` detectada: **{bool(_secret('GROQ_API_KEY'))}**"
+                    )
+                    st.write(
+                        f"- `ANTHROPIC_API_KEY` detectada: "
+                        f"**{bool(_secret('ANTHROPIC_API_KEY'))}**"
+                    )
+                    errors = getattr(generator, "last_errors", {})
+                    if errors:
+                        for provider, msg in errors.items():
+                            st.write(f"- Error de `{provider}`: {msg}")
+                    else:
+                        st.write("- Sin errores capturados (¿ninguna key configurada?).")
 
 
 def view_compliance(df: pd.DataFrame) -> None:

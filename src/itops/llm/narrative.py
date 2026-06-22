@@ -174,19 +174,23 @@ class NarrativeGenerator:
 
         prompt = build_escalation_prompt(ticket_context, top_features)
         narrative: Narrative | None = None
+        self.last_errors: dict[str, str] = {}
 
-        for caller in (self._call_claude, self._call_groq):
+        for name, caller in (("claude", self._call_claude), ("groq", self._call_groq)):
             try:
                 result = caller(prompt)
                 if result.confidence > 0.0:
                     narrative = result
                     break
-            except Exception:
-                continue
+                self.last_errors[name] = "respuesta sin JSON válido (confidence=0)"
+            except Exception as exc:
+                self.last_errors[name] = f"{type(exc).__name__}: {exc}"
 
         if narrative is None:
             narrative = self._build_template_narrative(ticket_context, top_features)
 
-        if narrative.confidence > 0.0:
+        # No cachear el template: si luego se configura una API key, queremos
+        # reintentar el LLM en vez de servir el fallback cacheado.
+        if narrative.confidence > 0.0 and narrative.provider != "template":
             self._cache_set(key, narrative)
         return narrative
