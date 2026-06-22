@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -10,9 +11,16 @@ import seaborn as sns
 import streamlit as st
 
 from itops.config import PROCESSED_DIR
+from itops.llm.narrative import NarrativeGenerator
 
 PARQUET_PATH = PROCESSED_DIR / "dashboard_data.parquet"
 METRICS_PATH = PROCESSED_DIR / "model_metrics.json"
+
+PROVIDER_LABELS = {
+    "claude": "Claude Haiku (Anthropic)",
+    "groq": "Groq · llama-3.1-8b-instant",
+    "template": "Template (sin API key)",
+}
 
 
 @st.cache_data
@@ -25,6 +33,24 @@ def load_metrics() -> dict:
     if METRICS_PATH.exists():
         return json.loads(METRICS_PATH.read_text())
     return {}
+
+
+def _secret(name: str) -> str | None:
+    """Lee una API key desde st.secrets (Streamlit Cloud) o variables de entorno."""
+    try:
+        if name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+    return os.environ.get(name)
+
+
+@st.cache_resource
+def get_narrative_generator() -> NarrativeGenerator:
+    return NarrativeGenerator(
+        anthropic_api_key=_secret("ANTHROPIC_API_KEY"),
+        groq_api_key=_secret("GROQ_API_KEY"),
+    )
 
 
 def view_operaciones(df: pd.DataFrame) -> None:
@@ -65,69 +91,46 @@ def view_operaciones(df: pd.DataFrame) -> None:
 
     st.subheader("Narrativa LLM — Explicación por ticket")
     st.caption(
-        "Requiere que la API esté corriendo. "
-        "Selecciona un ticket de alto riesgo y genera la explicación en lenguaje natural."
+        "Selecciona un ticket de alto riesgo y genera la explicación en lenguaje natural. "
+        "Se genera en el propio dashboard (Claude → Groq → template) usando las features "
+        "SHAP pre-computadas, sin depender de la API."
     )
 
-    api_url = st.text_input("URL de la API", value="http://localhost:8000", key="api_url")
     top_ids = df.nlargest(20, "risk_score")["ticket_id"].tolist()
     selected_id = st.selectbox("Ticket (top 20 por riesgo)", top_ids)
 
-    if st.button("Generar narrativa con Claude"):
+    if st.button("Generar narrativa"):
         matches = df[df["ticket_id"] == selected_id]
         if matches.empty:
             st.error(f"Ticket {selected_id} no encontrado en el dataset.")
         else:
             row = matches.iloc[0]
-            payload = {
-                "ticket": {
-                    "ticket_id": str(row["ticket_id"]),
-                    "created_at": row["created_at"].isoformat(),
-                    "category": str(row["category"]),
-                    "subcategory": str(row.get("subcategory", "unknown")),
-                    "priority_initial": str(row["priority_initial"]),
-                    "customer_tier": str(row["customer_tier"]),
-                    "description": str(row.get("description", "")),
-                    "response_time_minutes": int(row["response_time_minutes"]),
-                    "num_comments": int(row.get("num_comments", 0)),
-                    "num_reassignments": int(row.get("num_reassignments", 0)),
-                    "business_hours": bool(row.get("business_hours", True)),
-                    "assigned_team": str(row["assigned_team"]),
-                }
+            top_features = [
+                {"feature": str(row[f"feature_{i}"]), "shap": float(row[f"shap_{i}"])}
+                for i in range(1, 4)
+                if f"feature_{i}" in row and pd.notna(row[f"feature_{i}"])
+            ]
+            ticket_context = {
+                "ticket_id": str(row["ticket_id"]),
+                "category": str(row["category"]),
+                "priority": str(row["priority_initial"]),
+                "customer_tier": str(row["customer_tier"]),
+                "risk_score": float(row["risk_score"]),
+                "description_snippet": str(row.get("description", ""))[:200],
             }
-            with st.spinner("Llamando a la API..."):
-                try:
-                    import httpx
-                    resp = httpx.post(f"{api_url}/explain", json=payload, timeout=30)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        narrative = data["narrative"]
-                        provider = narrative["provider"]
-                        confidence = narrative["confidence"]
+            with st.spinner("Generando narrativa..."):
+                narrative = get_narrative_generator().generate(ticket_context, top_features)
 
-                        provider_labels = {
-                            "claude": "Claude Haiku (Anthropic)",
-                            "groq": "Groq · llama-3.1-8b-instant",
-                            "template": "Template (sin API key)",
-                        }
-                        provider_label = provider_labels.get(provider, provider)
-                        st.success(f"Narrativa generada · **{provider_label}**")
-                        st.markdown(f"**Resumen:** {narrative['summary']}")
-                        st.markdown(f"**Recomendación:** {narrative['recommendation']}")
-                        c1, c2 = st.columns(2)
-                        c1.metric("Confianza", f"{confidence:.0%}")
-                        c2.metric("Proveedor", provider_label)
-                        features_str = " · ".join(f["feature"] for f in data["top_features"])
-                        st.caption(f"Top SHAP features: {features_str}")
-                    else:
-                        st.error(f"API respondió {resp.status_code}: {resp.text[:200]}")
-                except Exception as exc:
-                    st.warning(
-                        f"No se pudo conectar a la API en `{api_url}`.\n\n"
-                        f"Inicia el servidor con:\n```\n"
-                        f"KMP_DUPLICATE_LIB_OK=TRUE OMP_NUM_THREADS=1 "
-                        f"uv run uvicorn itops.api.main:app\n```\n\nError: {exc}"
-                    )
+            provider_label = PROVIDER_LABELS.get(narrative.provider, narrative.provider)
+            st.success(f"Narrativa generada · **{provider_label}**")
+            st.markdown(f"**Resumen:** {narrative.summary}")
+            st.markdown(f"**Recomendación:** {narrative.recommendation}")
+            c1, c2 = st.columns(2)
+            c1.metric("Confianza", f"{narrative.confidence:.0%}")
+            c2.metric("Proveedor", provider_label)
+            if top_features:
+                features_str = " · ".join(f["feature"] for f in top_features)
+                st.caption(f"Top SHAP features: {features_str}")
 
 
 def view_compliance(df: pd.DataFrame) -> None:

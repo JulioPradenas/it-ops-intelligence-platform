@@ -15,6 +15,7 @@ from itops.config import MODELS_DIR, PROCESSED_DIR, RAW_TICKETS_CSV
 from itops.data.features import FEATURE_COLS, build_hourly_features
 from itops.models.anomaly import AutoencoderDetector, IsolationForestDetector
 from itops.models.escalation import EscalationModel
+from itops.models.explainer import ShapExplainer
 
 
 def main() -> None:
@@ -105,6 +106,16 @@ def main() -> None:
         merged = dashboard_df.merge(
             window_data, on=["_date", "_hour", "category"], how="left"
         ).drop(columns=["_date", "_hour"])
+
+        # SHAP top-3 features para los tickets seleccionables en el dashboard
+        # (top 50 por riesgo) — permite generar narrativas sin cargar el modelo.
+        print("Pre-computando SHAP top-features para el dashboard...")
+        explainer = ShapExplainer(escalation_model)
+        top_tickets = merged.nlargest(50, "risk_score")
+        shap_top = explainer.top_features(df_sorted.loc[top_tickets.index], n=3)
+        for col in shap_top.columns:
+            merged[col] = pd.NA
+        merged.loc[shap_top.index, shap_top.columns] = shap_top
 
         parquet_path = PROCESSED_DIR / "dashboard_data.parquet"
         merged.to_parquet(parquet_path, index=False)
